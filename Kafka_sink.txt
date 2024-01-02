@@ -1,0 +1,18 @@
+https://medium.com/@gabrielqueiroz/como-usar-o-kafka-jdbc-sink-connector-391ded610f3
+
+
+curl -XPOST --header "Content-Type: application/json" localhost:8083/connectors -d '{  
+    "name": "sink",  
+    "config": {    
+        "name": "sink",    
+        "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",    
+        "tasks.max": 1,    
+        "connection.url": "jdbc:mysql://localhost:3306/test",
+        "connection.user": "root",    
+        "connection.password": "root",    
+        "topics": "balance",
+        "auto.create": "true"  
+    }
+}'
+
+

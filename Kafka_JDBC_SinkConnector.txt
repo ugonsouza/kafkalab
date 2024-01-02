@@ -1,0 +1,10 @@
+JDBC Sink Connector
+https://www.youtube.com/watch?v=ABOJGB5G35k
+https://www.youtube.com/watch?v=IPJXIKrohww&list=PLa7VYi0yPIH0SG2lvtS2Aoa12F22jKYYJ
+
+https://medium.com/@gabrielqueiroz/como-usar-o-kafka-jdbc-sink-connector-391ded610f3
+https://rmoff.net/search/
+
+Kafka-python
+
+https://towardsdatascience.com/kafka-python-explained-in-10-lines-of-code-800e3e07dad1

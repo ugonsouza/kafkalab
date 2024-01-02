@@ -1,0 +1,184 @@
+Steps
+Start Kafka Services
+Start connector
+Register dbezium connector
+
+
+#------------------------------------
+# -- File config/worker.properties
+#------------------------------------
+offset.storage.file.filename=/tmp/connect.offsets
+bootstrap.servers=localhost:9092
+offset.flush.interval.ms=10000
+#rest.port=10082
+rest.host.name=localhost
+rest.advertised.port=8083
+rest.advertised.host.name=localhost
+internal.key.converter=org.apache.kafka.connect.json.JsonConverter
+internal.value.converter=org.apache.kafka.connect.json.JsonConverter
+internal.key.converter.schemas.enable=false
+internal.value.converter.schemas.enable=false
+key.converter=org.apache.kafka.connect.json.JsonConverter
+value.converter=org.apache.kafka.connect.json.JsonConverter
+#plugin.path=/home/plugins
+plugin.path=/home/kafka/kafka/plugins
+#If kafka is TLS authenticated, uncomment below lines.
+#security.protocol=SSL 
+#ssl.truststore.location=/tmp/kafka.client.truststore.jks
+#producer.security.protocol=SSL
+#producer.ssl.truststore.location=/tmp/kafka.client.truststore.jks
+
+#------------------------------------
+# -- File config/connector.properties
+# -- NOT NEEDED
+#------------------------------------
+name=sql-server-connection
+connector.class=io.debezium.connector.sqlserver.SqlServerConnector
+database.hostname=192.168.56.102
+database.port=1433
+database.user=cdc_login
+database.password=cdc_login
+database.dbname=cdc_test
+database.server.name=CDC_TEST
+table.whitelist=dbo.test
+database.history.kafka.bootstrap.servers=localhost:9092
+database.history.kafka.topic=dbhistory.history
+#If kafka is TLS authenticated, uncomment below lines.
+#database.history.producer.security.protocol=SSL
+#database.history.producer.ssl.truststore.location=/tmp/kafka.client.truststore.jks
+
+#------------------------------------
+# -- File zookeeper.service
+#------------------------------------
+[Unit]
+Description=Apache Zookeeper server
+Documentation=http://zookeeper.apache.org
+Requires=network.target remote-fs.target
+After=network.target remote-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/kafka/bin/zookeeper-server-start.sh /usr/local/kafka/config/zookeeper.properties
+ExecStop=/usr/local/kafka/bin/zookeeper-server-stop.sh
+Restart=on-abnormal
+
+[Install]
+WantedBy=multi-user.target
+
+#------------------------------------
+# -- File kafka.service
+#------------------------------------
+[Unit]
+Description=Apache Kafka Server
+Documentation=http://kafka.apache.org/documentation.html
+Requires=zookeeper.service
+
+[Service]
+Type=simple
+Environment=”JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64″
+ExecStart=/usr/local/kafka/bin/kafka-server-start.sh /usr/local/kafka/config/server.properties
+ExecStop=/usr/local/kafka/bin/kafka-server-stop.sh
+
+[Install]
+WantedBy=multi-user.target
+
+
+#------------------------------------
+# -- Broker / Zookeeper services
+#------------------------------------
+listeners=PLAINTEXT://:9092
+advertised.listeners=PLAINTEXT://localhost:9092
+delete.topic.enable = true
+
+# -- Kafka service
+sudo systemctl status kafka.service
+
+sudo systemctl start zookeeper.service
+sudo systemctl start kafka.service
+
+sudo systemctl stop kafka.service 
+sudo systemctl stop zookeeper.service
+
+#------------------------------------
+# -- If service fail to start due to cluster ID
+#------------------------------------
+cd /tmp/kafka-logs/
+sudo mv meta.properties meta.properties.old
+
+
+#------------------------------------
+# -- Start a standalone connector
+#------------------------------------
+sudo /usr/local/kafka/bin/connect-standalone.sh -daemon /usr/local/kafka/config/worker.properties # --> not needed --> /usr/local/kafka/config/connector.properties
+telnet localhost 8083
+
+# -- Create file @register-debezium.json
+
+{
+ "name": "debezium-connector",
+ "config": {
+     "connector.class" : "io.debezium.connector.sqlserver.SqlServerConnector",
+     "tasks.max" : "1",
+     "database.server.name" : "CDC_TEST2",
+     "database.hostname" : "192.168.56.102",
+     "database.port" : "1433",
+     "database.user" : "debezium",
+     "database.password" : "debezium",
+     "database.dbname" : "testDB",
+     "database.history.kafka.bootstrap.servers" : "localhost:9092",
+     "database.history.kafka.topic":"debezium_sqlserver",
+     "snapshot.mode":"initial"
+     }
+ }
+ 
+ 
+#------------------------------------
+# -- Kafka help commands
+#------------------------------------
+# -- Create topics
+/usr/local/kafka/bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions 1 --topic dbhistory.history
+/usr/local/kafka/bin/kafka-topics.sh --create --bootstrap-server localhost:9092 --replication-factor 1 --partitions 1 --topic hwrld
+
+# -- Send messages
+/usr/local/kafka/bin/kafka-console-producer.sh --topic hwrld --bootstrap-server localhost:9092
+
+# -- Start consumer
+/usr/local/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic debezium_sqlserver --from-beginning
+/usr/local/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic CDC_TEST2.dbo.customers --from-beginning
+/usr/local/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic hwrld --from-beginning
+
+# -- List topics
+/usr/local/kafka/bin/kafka-topics.sh --list --zookeeper localhost:2181
+/usr/local/kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:9092
+/usr/local/kafka/bin/kafka-topics.sh --bootstrap-server=localhost:9092 --describe --topic dbhistory.history
+
+# -- List groups
+/usr/local/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --list
+
+
+# -- Delete topics
+/usr/local/kafka/bin/kafka-topics.sh --zookeeper localhost:2181 --delete --topic dbhistory.history
+
+#------------------------------------
+# -- Kafka connect help commands
+#------------------------------------
+curl -s localhost:8083/connector-plugins
+curl http://localhost:8083/connectors/ 
+curl -k http://localhost:8083/connectors/debezium-connector/status
+curl -X PUT http://localhost:8083/connectors/debezium-connector/pause
+curl -X POST http://localhost:8083/connectors/debezium-connector/tasks/0/restart
+
+# -------- Start Debezium connector
+curl -i -X POST -H "Accept:application/json" -H "Content-Type:application/json" http://localhost:8083/connectors/ -d @register-debezium.json
+
+# -------- Start sql cdc connector
+curl -i -X POST -H "Accept:application/json" -H "Content-Type:application/json" http://localhost:8083/connectors/ -d @register-sqlserver2.json
+
+curl -k http://localhost:8083/connectors/inventory-connector2/status
+curl -X DELETE http://localhost:8083/connectors/<connector-name>
+
+curl -i -X POST -H "Accept:application/json" -H "Content-Type:application/json" http://localhost:8083/connectors/ -d @register-sqlserver2.json
+curl -i -X POST -H "Accept:application/json" -H "Content-Type:application/json" http://localhost:8083/connectors/ -d @register-debezium.json
+
+
+https://supergloo.com/kafka-connect/kafka-connect-rest-api-essentials/
